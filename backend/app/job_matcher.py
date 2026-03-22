@@ -2,7 +2,12 @@ import logging
 try:
     from ml_models.job_matching import LocalJobMatcher
 except (ImportError, ValueError):
-    from ..ml_models.job_matching import LocalJobMatcher
+    try:
+        from ..ml_models.job_matching import LocalJobMatcher
+    except ImportError as e:
+        print(f"Warning: Could not import LocalJobMatcher due to environment restrictions: {e}")
+        LocalJobMatcher = None
+
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -10,7 +15,14 @@ logger = logging.getLogger(__name__)
 class JobMatcher:
     def __init__(self, job_listings: List[Dict[str, Any]]):
         self.listings = job_listings
-        self.matcher = LocalJobMatcher()
+        if LocalJobMatcher:
+            try:
+                self.matcher = LocalJobMatcher()
+            except Exception as e:
+                print(f"Warning: Could not initialize LocalJobMatcher: {e}")
+                self.matcher = None
+        else:
+            self.matcher = None
 
     async def match(self, user_skills: List[str], location: Optional[str] = None, live_jobs: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         # Combine local roles with live jobs
@@ -40,24 +52,26 @@ class JobMatcher:
             return []
             
         # Match using local semantic model
-        try:
-            match_results = self.matcher.match(user_text, [str(job_texts[i]) for i in filtered_indices])
-            
-            results = []
-            for res in match_results:
-                idx = int(res.get("index", 0))
-                original_index = int(filtered_indices[idx])
-                job = all_jobs[original_index]
-                results.append({
-                    **job,
-                    "match_score": float(f"{(res['score'] * 100):.1f}")
-                })
+        if self.matcher:
+            try:
+                match_results = self.matcher.match(user_text, [str(job_texts[i]) for i in filtered_indices])
                 
-            return results
-        except Exception as e:
-            logger.error(f"Error during semantic job matching: {e}")
-            # Basic fallback - return first 10
-            fallback_results = []
-            for i in range(min(10, len(all_jobs))):
-                fallback_results.append(all_jobs[i])
-            return fallback_results
+                results = []
+                for res in match_results:
+                    idx = int(res.get("index", 0))
+                    original_index = int(filtered_indices[idx])
+                    job = all_jobs[original_index]
+                    results.append({
+                        **job,
+                        "match_score": float(f"{(res['score'] * 100):.1f}")
+                    })
+                    
+                return results
+            except Exception as e:
+                logger.error(f"Error during semantic job matching: {e}")
+        
+        # Basic fallback - return first 10
+        fallback_results = []
+        for i in range(min(10, len(all_jobs))):
+            fallback_results.append(all_jobs[i])
+        return fallback_results

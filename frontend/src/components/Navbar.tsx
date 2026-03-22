@@ -42,9 +42,11 @@ export default function Navbar() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         {/* Logo */}
-                        <Link href="/" className="flex items-center gap-2 group">
-                            <img src="/logo.png" alt="Logo" className="w-10 h-10 rounded-xl object-contain bg-white/5 p-1 group-hover:shadow-lg group-hover:shadow-primary-500/30 transition-all duration-300" />
-                            <span className="text-xl font-bold font-display text-white">CAREER BRIDGE - AI</span>
+                        <Link href="/" className="flex items-center gap-3.5 group">
+                            <div className="w-10 h-10 flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
+                                <img src="/logo.png" alt="Career Setu AI Logo" className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(99,102,241,0.3)]" />
+                            </div>
+                            <span className="text-xl font-bold font-display text-white tracking-tight leading-none">Career Setu <span className="text-primary-400 font-extrabold pb-0.5">AI</span></span>
                         </Link>
 
                         {/* Desktop Nav */}

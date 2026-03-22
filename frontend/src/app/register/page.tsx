@@ -28,8 +28,16 @@ export default function RegisterPage() {
     const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
     const { speak, toggleVoice, isVoiceEnabled, phrases } = useVoiceAssistant();
     const [form, setForm] = useState({
-        name: "", email: "", phone: "", password: "", location: "", education: "",
-        selectedSkills: [] as string[], interests: [] as string[], otp: "", role: "professional"
+        role: 'professional',
+        name: '',
+        email: '',
+        phone: '',
+        password: '',
+        location: '',
+        education: '',
+        selectedSkills: [] as string[],
+        interests: [] as string[],
+        otp: ""
     });
 
     useEffect(() => {
@@ -73,68 +81,27 @@ export default function RegisterPage() {
             return; 
         }
         
-        // At step 3: Send OTP before proceeding to Step 4
-        if (step === 3) {
-            setLoading(true);
-            setError("");
-            try {
-                // Initialize Recaptcha if it doesn't exist
-                if (!window.recaptchaVerifier) {
-                    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-                        size: 'invisible'
-                    });
-                }
-                const appVerifier = window.recaptchaVerifier;
-                
-                // Format phone number
-                const phoneNumber = form.phone.startsWith('+') ? form.phone : `+91${form.phone}`;
-                
-                const confResult = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
-                setConfirmationResult(confResult);
-                setStep(4);
-            } catch (err: any) {
-                console.error(err);
-                setError(err.message || "Failed to send OTP. Ensure number is valid with country code.");
-            } finally {
-                setLoading(false);
-            }
-            return;
-        }
-
-        // At step 4: Register with OTP
+        // At step 3: Register immediately
         setLoading(true);
         setError("");
         try {
-            // Special handling for Test OTP (123567) if confirmationResult is missing
-            if (!confirmationResult && form.otp === "123567") {
-                // Bypass Firebase verify and go straight to backend register
-                const payload = {
-                    ...form,
-                    skills: form.selectedSkills,
-                    otp: "123567" // Send the test string directly
-                };
-                const res = await api.register(payload);
-                router.push("/login");
-                return;
-            }
-
-            if (!confirmationResult) throw new Error("No confirmation result. Try again.");
-            
-            // Verify OTP via Firebase
-            const result = await confirmationResult.confirm(form.otp);
-            const user = result.user;
-            
-            // Fetch Firebase ID Token for backend verification
-            const idToken = await user.getIdToken();
-            
             const payload = {
                 ...form,
                 skills: form.selectedSkills,
-                otp: idToken // Send idToken securely
+                otp: "none"
             };
             const res = await api.register(payload);
+            
+            // Auto-Login: Save token and user info (Production Ready)
+            if (res.access_token) {
+                localStorage.setItem("token", res.access_token);
+                localStorage.setItem("user", JSON.stringify(res.user));
+            }
+
             if (form.role === 'worker') speak(phrases.REGISTER_SUCCESS);
-            router.push("/login");
+
+            // Redirect to dashboard (Production Ready)
+            router.push("/dashboard");
         } catch (err: any) {
             setError(err.message || "Registration failed. Please try again.");
             setLoading(false);
@@ -151,18 +118,16 @@ export default function RegisterPage() {
                 className="relative z-10 w-full max-w-lg mx-4"
             >
                 <div className="text-center mb-8 relative">
-                    <button 
-                        onClick={toggleVoice}
-                        className={`absolute -top-2 -right-2 p-2 rounded-full border transition-all ${isVoiceEnabled ? "border-primary-500 text-primary-400 bg-primary-500/10" : "border-white/10 text-dark-500"}`}
-                    >
-                        {isVoiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                    </button>
-                    <Link href="/" className="inline-flex items-center gap-2 mb-6">
-                        <img src="/logo.png" alt="Logo" className="w-10 h-10 rounded-xl object-contain bg-white/5 p-1" />
-                        <span className="text-xl font-bold font-display text-white">CAREER BRIDGE - AI</span>
+                <div className="text-center mb-10 relative">
+                    <Link href="/" className="inline-flex items-center gap-3 mb-8 group">
+                        <div className="w-12 h-12 bg-white/5 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform">
+                            <img src="/logo.png" alt="Logo" className="w-9 h-9 object-contain" />
+                        </div>
+                        <span className="text-2xl font-bold font-display text-white tracking-tight">Career Setu <span className="text-primary-400">AI</span></span>
                     </Link>
-                    <h1 className="text-2xl font-bold font-display text-white">Create Account</h1>
-                    <p className="text-dark-400 text-sm mt-2">Step {step} of 3 — {step === 1 ? "Basic Info" : step === 2 ? "Your Skills" : "Your Interests"}</p>
+                    <h1 className="text-3xl font-bold font-display text-white">Create Account</h1>
+                    <p className="text-dark-400 text-sm mt-2 font-medium">Step {step} of 3 — {step === 1 ? "Basic Info" : step === 2 ? "Your Skills" : "Your Interests"}</p>
+                </div>
                 </div>
 
                 {/* Progress Bar */}
@@ -194,9 +159,8 @@ export default function RegisterPage() {
                                     <label className="text-sm text-dark-300 mb-2 block">Full Name</label>
                                     <div className="relative">
                                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-500" />
-                                        <input type="text" placeholder="Your full name" required className="input-field !pl-11"
+                                        <input type="text" id="name" name="name" placeholder="Your full name" required className="input-field !pl-11"
                                             value={form.name} 
-                                            onFocus={() => form.role === 'worker' && speak(phrases.ENTER_NAME)}
                                             onChange={e => setForm({ ...form, name: e.target.value })} 
                                         />
                                     </div>
@@ -213,9 +177,8 @@ export default function RegisterPage() {
                                     <label className="text-sm text-dark-300 mb-2 block">Phone Number (with country code)</label>
                                     <div className="relative">
                                         <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-500" />
-                                        <input type="tel" placeholder="+91 9876543210" required className="input-field !pl-11"
+                                        <input type="tel" id="phone" name="phone" placeholder="+91 9876543210" required className="input-field !pl-11"
                                             value={form.phone} 
-                                            onFocus={() => form.role === 'worker' && speak(phrases.ENTER_PHONE)}
                                             onChange={e => setForm({ ...form, phone: e.target.value })} 
                                         />
                                     </div>
@@ -302,35 +265,6 @@ export default function RegisterPage() {
                                         ))}
                                     </div>
                                 </div>
-                                
-                                <div className="pt-6 border-t border-white/5">
-                                    <button 
-                                        type="button" 
-                                        onClick={() => setStep(4)}
-                                        className="w-full py-3 rounded-xl bg-white/5 text-dark-400 hover:bg-white/10 hover:text-white transition-all text-xs font-bold uppercase tracking-wider border border-white/5"
-                                    >
-                                        Skip to Verification (Local Test)
-                                    </button>
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {step === 4 && (
-                            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                                <div className="text-center mb-6">
-                                    <h3 className="text-xl font-bold text-white mb-2">Verify Phone</h3>
-                                    <p className="text-sm text-dark-400">
-                                        We&apos;ve sent a 6-digit code to <span className="text-primary-400 font-medium">{form.phone}</span>
-                                    </p>
-                                </div>
-                                <div>
-                                    <label className="text-sm text-dark-300 mb-2 block text-center">Verification Code</label>
-                                    <input type="text" placeholder="123456" maxLength={6} required 
-                                        className="input-field text-center tracking-[0.5em] text-xl !py-4 font-mono font-bold"
-                                        value={form.otp} onChange={e => setForm({ ...form, otp: e.target.value })} 
-                                    />
-                                    <p className="text-xs text-dark-500 mt-2 text-center">Use <span className="text-primary-400 font-bold">123567</span> for testing if OTP not received</p>
-                                </div>
                             </motion.div>
                         )}
 
@@ -341,7 +275,7 @@ export default function RegisterPage() {
                             <button type="submit" disabled={loading}
                                 className="btn-primary flex-1 flex items-center justify-center gap-2 !py-3.5 disabled:opacity-50"
                             >
-                                {loading ? <div className="loader !w-5 !h-5" /> : <>{step === 4 ? "Verify & Create Account" : step === 3 ? "Send OTP" : "Continue"} <ArrowRight className="w-4 h-4" /></>}
+                                {loading ? <div className="loader !w-5 !h-5" /> : <>{step === 3 ? "Complete Registration" : "Continue"} <ArrowRight className="w-4 h-4" /></>}
                             </button>
                         </div>
                     </form>

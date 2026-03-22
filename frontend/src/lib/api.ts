@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
 export async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     const url = endpoint.startsWith("http") ? endpoint : `${API_URL}${endpoint}`;
@@ -16,7 +16,11 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
     });
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || "Something went wrong");
+        // FastAPI uses 'detail', generic may use 'message'
+        const errorMessage = error.detail 
+            ? (typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail))
+            : (error.message || "Something went wrong");
+        throw new Error(errorMessage);
     }
     return response.json();
 }
@@ -26,6 +30,7 @@ export const api = {
     register: (data: any) => fetchWithAuth("/auth/register", { method: "POST", body: JSON.stringify(data) }),
     login: (credentials: any) => fetchWithAuth("/auth/login", { method: "POST", body: JSON.stringify(credentials) }),
     getProfile: () => fetchWithAuth("/profile"),
+    updateProfile: (data: any) => fetchWithAuth("/profile/update", { method: "POST", body: JSON.stringify(data) }),
 
     // Careers & Skills
     getRecommendations: (skills: string[]) => fetchWithAuth(`/career/recommend?skills=${skills.join(",")}`),
@@ -52,11 +57,41 @@ export const api = {
     startInterview: (roleId: string) => fetchWithAuth("/interview/start", { method: "POST", body: JSON.stringify({ role_id: roleId }) }),
     evaluateAnswer: (question: string, answer: string) => fetchWithAuth("/interview/evaluate", { method: "POST", body: JSON.stringify({ question, answer }) }),
 
-    // Worker Dashboard (New)
+    // Worker Dashboard
     verifyAadhaar: (aadhaar: string) => fetchWithAuth("/worker/verify/aadhaar", { method: "POST", body: JSON.stringify({ aadhaar_number: aadhaar }) }),
     getWorkerProfile: () => fetchWithAuth("/worker/profile"),
     updateWorkerProfile: (data: any) => fetchWithAuth("/worker/profile/update", { method: "POST", body: JSON.stringify(data) }),
     getWorkerRequests: () => fetchWithAuth("/worker/requests"),
+    uploadWorkerWork: async (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+        const response = await fetch(`${API_URL}/worker/upload-work`, {
+            method: "POST",
+            body: formData,
+            headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        });
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new Error(errBody || "Upload failed");
+        }
+        return response.json();
+    },
+    uploadProfilePhoto: async (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+        const response = await fetch(`${API_URL}/chat/upload`, {
+            method: "POST",
+            body: formData,
+            headers: token ? { "Authorization": `Bearer ${token}` } : {},
+        });
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new Error(errBody || "Upload failed");
+        }
+        return response.json();
+    },
 
     // Customer Dashboard (New)
     discoverServices: (query?: string) => fetchWithAuth(`/customer/services${query ? `?query=${query}` : ""}`),
@@ -74,7 +109,7 @@ export const api = {
     getAnalyticsDistricts: (state?: string) => fetchWithAuth(`/analytics/districts${state ? `?state=${state}` : ""}`),
 
     // Chat (New)
-    getChatUsers: () => fetchWithAuth("/chat/users"),
+    getChatUsers: (query?: string) => fetchWithAuth(`/chat/users${query ? `?query=${encodeURIComponent(query)}` : ""}`),
     getConversations: () => fetchWithAuth("/chat/conversations"),
     getChatHistory: (receiverEmail: string) => {
         const token = localStorage.getItem("token");
@@ -89,6 +124,10 @@ export const api = {
             body: formData,
             headers: token ? { "Authorization": `Bearer ${token}` } : {},
         });
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new Error(errBody || "Upload request failed");
+        }
         return response.json();
     },
 
@@ -103,5 +142,11 @@ export const api = {
     updateUserLocation: (lat: number, lng: number) => fetchWithAuth("/profile/update-location", {
         method: "POST",
         body: JSON.stringify({ latitude: lat, longitude: lng })
+    }),
+
+    // AI Assistant
+    assistantQuery: (data: { transcript: string, pathname: string }) => fetchWithAuth("/assistant/query", {
+        method: "POST",
+        body: JSON.stringify(data)
     }),
 };

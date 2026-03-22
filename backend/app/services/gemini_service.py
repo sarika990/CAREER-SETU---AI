@@ -10,7 +10,7 @@ load_dotenv()
 class GeminiService:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
-        if self.api_key:
+        if self.api_key and "your_gemini" not in self.api_key:
             self.client = genai.Client(api_key=self.api_key)
             self.model_id = "gemini-2.0-flash"
         else:

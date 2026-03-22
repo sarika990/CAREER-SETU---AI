@@ -39,12 +39,14 @@ export default function LoginPage() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                 className="relative z-10 w-full max-w-md mx-4"
             >
-                <div className="text-center mb-8">
-                    <Link href="/" className="inline-flex items-center gap-2 mb-6">
-                        <img src="/logo.png" alt="Logo" className="w-10 h-10 rounded-xl object-contain bg-white/5 p-1" />
-                        <span className="text-xl font-bold font-display text-white">CAREER BRIDGE - AI</span>
+                <div className="text-center mb-10">
+                    <Link href="/" className="inline-flex items-center gap-3 mb-8 group">
+                        <div className="w-12 h-12 bg-white/5 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform">
+                            <img src="/logo.png" alt="Logo" className="w-9 h-9 object-contain" />
+                        </div>
+                        <span className="text-2xl font-bold font-display text-white tracking-tight">Career Setu <span className="text-primary-400">AI</span></span>
                     </Link>
-                    <h1 className="text-2xl font-bold font-display text-white">Welcome Back</h1>
+                    <h1 className="text-3xl font-bold font-display text-white">Welcome Back</h1>
                     <p className="text-dark-400 text-sm mt-2">Sign in to continue your career journey</p>
                 </div>
 

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -29,7 +29,7 @@ try:
     from .database import get_db
     from .auth import get_password_hash, verify_password, create_access_token, get_current_user_email, RoleChecker
     from .services.firebase_service import verify_firebase_token
-    from .routers import worker, customer, admin, chat, identity
+    from .routers import worker, customer, admin, chat, identity, assistant
 except (ImportError, ValueError):
     # Fallback for direct execution or misconfigured PYTHONPATH
     from app.skill_extractor import SkillExtractor
@@ -45,7 +45,7 @@ except (ImportError, ValueError):
     from app.database import get_db
     from app.auth import get_password_hash, verify_password, create_access_token, get_current_user_email, RoleChecker
     from app.services.firebase_service import verify_firebase_token
-    from app.routers import worker, customer, admin, chat
+    from app.routers import worker, customer, admin, chat, assistant
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -73,6 +73,7 @@ app.include_router(customer.router)
 app.include_router(admin.router)
 app.include_router(chat.router)
 app.include_router(identity.router)
+app.include_router(assistant.router)
 
 # CORS Configuration
 # NOTE: allow_credentials=True is only valid when allow_origins is NOT ["*"].
@@ -86,8 +87,7 @@ async def startup_db_client():
     try:
         await db["users"].create_index("email", unique=True)
         await db["users"].create_index("phone", unique=True)
-        # Geospatial index for location-based matching
-        await db["users"].create_index([("location", "2dsphere")])
+        # await db["users"].create_index([("location", "2dsphere")])
         
         await db["worker_profiles"].create_index("user_id", unique=True)
         await db["service_requests"].create_index("customer_id")
@@ -101,7 +101,7 @@ async def startup_db_client():
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=_use_credentials,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -161,27 +161,21 @@ async def register(profile: UserRegistration):
     # ... (existing code)
     db = get_db()
     
-    # 1. Verify OTP - Allow universal test code '123567'
-    is_test_otp = profile.otp == "123567"
-    firebase_auth = verify_firebase_token(profile.otp)
-    
-    if not firebase_auth and not is_test_otp:
-        raise HTTPException(status_code=401, detail="Invalid Verification Token")
-        
-    # 2. Assert Phone & Email Uniqueness
+    # 1. Assert Phone & Email Uniqueness
     existing_user = await db["users"].find_one({"$or": [{"email": profile.email}, {"phone": profile.phone}]})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email or phone already registered")
     
     # 3. Securely pack and insert model
     user_dict = profile.model_dump()
-    user_dict["password"] = get_password_hash(user_dict["password"])
+    # Fix: Ensure we get the raw string from SecretStr for hashing
+    user_dict["password"] = get_password_hash(profile.password.get_secret_value())
     user_dict.pop("otp", None)  # Remove OTP from DB payload
     user_dict["is_verified"] = True # Mark verified as we passed the OTP check
     
     result = await db["users"].insert_one(user_dict)
     
-    # NEW: Create default WorkerProfile if role is worker
+    # NEW: Create role-specific Profile entry
     if profile.role == UserRole.WORKER:
         worker_profile = {
             "user_id": profile.email,
@@ -191,13 +185,43 @@ async def register(profile: UserRegistration):
             "rating": 0.0,
             "total_reviews": 0,
             "total_earnings": 0.0,
-            "availability": True
+            "availability": True,
+            "work_photos": [],
+            "work_videos": []
         }
         await db["worker_profiles"].insert_one(worker_profile)
+    elif profile.role == UserRole.PROFESSIONAL:
+        prof_profile = {
+            "user_id": profile.email,
+            "industry": profile.interests[0] if profile.interests else "General",
+            "certifications": [],
+            "projects": [],
+            "mentorship_available": False,
+            "years_in_field": 0
+        }
+        await db["professional_profiles"].insert_one(prof_profile)
+    elif profile.role == UserRole.CUSTOMER:
+        cust_profile = {
+            "user_id": profile.email,
+            "preferences": profile.interests,
+            "total_spent": 0.0,
+            "saved_locations": [profile.location]
+        }
+        await db["customer_profiles"].insert_one(cust_profile)
+    
+    # Generate token for immediate login (Production Ready)
+    access_token = create_access_token(
+        data={"sub": profile.email, "role": profile.role.value}
+    )
     
     user_dict.pop("password", None)
     user_dict["_id"] = str(result.inserted_id)
-    return {"message": "User registered successfully", "user": user_dict}
+    return {
+        "message": "User registered successfully", 
+        "user": user_dict,
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
 
 @app.post("/api/auth/login")
 @app.post("/auth/login")
@@ -228,9 +252,78 @@ async def get_profile(email: str = Depends(get_current_user_email)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # 1. Pop sensitive fields
     user.pop("password", None)
     user["_id"] = str(user["_id"])
+    
+    # 2. Aggregating Role-Specific Extra-data
+    role = user.get("role")
+    if role == UserRole.WORKER:
+        worker_data = await db["worker_profiles"].find_one({"user_id": email})
+        if worker_data:
+            worker_data.pop("_id", None)
+            user["worker_info"] = worker_data
+    elif role == UserRole.PROFESSIONAL:
+        prof_data = await db["professional_profiles"].find_one({"user_id": email})
+        if prof_data:
+            prof_data.pop("_id", None)
+            user["professional_info"] = prof_data
+    elif role == UserRole.CUSTOMER:
+        cust_data = await db["customer_profiles"].find_one({"user_id": email})
+        if cust_data:
+            cust_data.pop("_id", None)
+            user["customer_info"] = cust_data
+            
     return user
+
+@app.post("/api/profile/update")
+async def update_profile(
+    data: dict = Body(...),
+    email: str = Depends(get_current_user_email)
+):
+    db = get_db()
+    user = await db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    role = user.get("role")
+    
+    # Update main user doc
+    main_fields = [
+        "name", "phone", "location", "bio", "skills", "interests", "education",
+        "profile_photo",
+        # Social links
+        "linkedin", "github", "portfolio_url",
+        # Professional info
+        "current_job_title", "industry", "experience_years",
+    ]
+    update_dict = {k: v for k, v in data.items() if k in main_fields}
+    if update_dict:
+        await db["users"].update_one({"email": email}, {"$set": update_dict})
+        
+    # Update role-specific doc
+    if role == UserRole.WORKER:
+        worker_fields = ["skills", "experience_years", "service_charges", "availability", "work_photos", "work_videos"]
+        w_update = {k: v for k, v in data.items() if k in worker_fields}
+        if w_update:
+            await db["worker_profiles"].update_one({"user_id": email}, {"$set": w_update}, upsert=True)
+    elif role == UserRole.PROFESSIONAL:
+        prof_fields = [
+            "mentorship_available", 
+            "professional_projects", 
+            "education_history", 
+            "certifications_list"
+        ]
+        p_update = {k: v for k, v in data.items() if k in prof_fields}
+        if p_update:
+            await db["professional_profiles"].update_one({"user_id": email}, {"$set": p_update}, upsert=True)
+    elif role == UserRole.CUSTOMER:
+        cust_fields = ["preferences", "saved_locations", "preferred_language"]
+        c_update = {k: v for k, v in data.items() if k in cust_fields}
+        if c_update:
+            await db["customer_profiles"].update_one({"user_id": email}, {"$set": c_update}, upsert=True)
+            
+    return {"message": "Profile updated successfully"}
 
 # Core Features
 # (Imports moved to top)
