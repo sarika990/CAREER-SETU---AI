@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Search, MapPin, Star, Plus, Clock, CheckCircle2, ChevronRight, Sparkles, MessageSquare, AlertCircle, X, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, BASE_BACKEND_URL } from "@/lib/api";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -249,8 +249,11 @@ export default function CustomerDashboard({ user }: { user: any }) {
                                 {workers.map((w, i) => (
                                     <div key={i} className="glass-card p-4 hover:bg-white/5 transition-all group border-l-2 border-accent-emerald">
                                         <div className="flex items-center gap-4 mb-3">
-                                            <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-primary-500 flex items-center justify-center font-bold text-primary-400 text-lg">
-                                                {w.name?.[0]?.toUpperCase() || "?"}
+                                            <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-primary-500 flex items-center justify-center font-bold text-primary-400 text-lg overflow-hidden">
+                                                {w.profile_photo 
+                                                    ? <img src={w.profile_photo.startsWith('http') ? w.profile_photo : `${BASE_BACKEND_URL}${w.profile_photo}`} className="w-full h-full object-cover" alt="worker" />
+                                                    : (w.name?.[0]?.toUpperCase() || "?")
+                                                }
                                             </div>
                                             <div>
                                                 <h4 className="text-white font-bold group-hover:text-primary-400 transition-colors">{w.name}</h4>
@@ -341,7 +344,7 @@ export default function CustomerDashboard({ user }: { user: any }) {
                         <div className="text-center">
                             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-accent-purple mx-auto flex items-center justify-center text-2xl font-bold text-white mb-4 shadow-xl overflow-hidden">
                                 {user?.profile_photo
-                                    ? <img src={user.profile_photo} className="w-full h-full object-cover" alt="avatar" />
+                                    ? <img src={user.profile_photo.startsWith('http') ? user.profile_photo : `${BASE_BACKEND_URL}${user.profile_photo}`} className="w-full h-full object-cover" alt="avatar" />
                                     : user?.name?.[0]?.toUpperCase()
                                 }
                             </div>

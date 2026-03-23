@@ -476,7 +476,7 @@ export default function WorkerDashboard({ user }: { user: any }) {
                         <div className="flex items-center gap-4 mb-5">
                             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-amber/40 to-orange-600/40 border border-accent-amber/20 flex items-center justify-center text-2xl font-bold text-white overflow-hidden flex-shrink-0">
                                 {user?.profile_photo
-                                    ? <img src={user.profile_photo} alt="avatar" className="w-full h-full object-cover" />
+                                    ? <img src={user.profile_photo.startsWith('http') ? user.profile_photo : `${BASE_BACKEND_URL}${user.profile_photo}`} alt="avatar" className="w-full h-full object-cover" />
                                     : user?.name?.[0]?.toUpperCase()
                                 }
                             </div>

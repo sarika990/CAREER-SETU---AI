@@ -10,7 +10,7 @@ import {
     BarChart2, Clock, Star, CheckCircle2, Loader2, Badge
 } from "lucide-react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, BASE_BACKEND_URL } from "@/lib/api";
 import { useNotify } from "@/components/NotificationProvider";
 import { FadeIn, Spinner, Skeleton, EmptyState, HoverCard } from "@/components/ui";
 
@@ -110,7 +110,7 @@ export default function ProfessionalDashboard({ user }: { user: any }) {
         portfolio_url: user?.portfolio_url || "",
         mentorship_available: user?.professional_info?.mentorship_available || false,
     });
-    const [projects, setProjects] = useState<Project[]>(user?.professional_info?.projects || []);
+    const [projects, setProjects] = useState<Project[]>(user?.professional_info?.professional_projects || []);
     const [education, setEducation] = useState<Education[]>(
         user?.professional_info?.education_history || [
             { degree: user?.education || "", institution: "", year: "", grade: "" }
@@ -721,7 +721,7 @@ export default function ProfessionalDashboard({ user }: { user: any }) {
                         <div className="text-center mb-5">
                             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-accent-purple mx-auto flex items-center justify-center text-2xl font-bold text-white shadow-xl overflow-hidden mb-3">
                                 {user?.profile_photo
-                                    ? <img src={user.profile_photo} alt="avatar" className="w-full h-full object-cover" />
+                                    ? <img src={user.profile_photo.startsWith('http') ? user.profile_photo : `${BASE_BACKEND_URL}${user.profile_photo}`} alt="avatar" className="w-full h-full object-cover" />
                                     : user?.name?.[0]?.toUpperCase()
                                 }
                             </div>

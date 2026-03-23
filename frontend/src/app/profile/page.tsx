@@ -196,7 +196,7 @@ export default function ProfilePage() {
                             >
                                 <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-purple flex items-center justify-center shadow-xl overflow-hidden border-2 border-white/10 group-hover:border-primary-500/60 transition-all">
                                     {user.profile_photo ? (
-                                        <img src={user.profile_photo} alt="Profile" className="w-full h-full object-cover" />
+                                        <img src={user.profile_photo.startsWith('http') ? user.profile_photo : `${BASE_BACKEND_URL}${user.profile_photo}`} alt="Profile" className="w-full h-full object-cover" />
                                     ) : (
                                         <span className="text-3xl font-bold text-white uppercase">{user.name?.charAt(0)}</span>
                                     )}
@@ -509,6 +509,15 @@ export default function ProfilePage() {
                                                 <p className="text-white font-semibold text-sm">{doc.label}</p>
                                                 <p className="text-dark-500 text-xs">{doc.desc}</p>
                                             </div>
+                                            {((doc.label === "Resume / CV" && user.resume_url) || (doc.label === "Aadhaar Card" && user.aadhaar_url)) && (
+                                                <a 
+                                                    href={(doc.label === "Resume / CV" ? user.resume_url : user.aadhaar_url).startsWith('http') ? (doc.label === "Resume / CV" ? user.resume_url : user.aadhaar_url) : `${BASE_BACKEND_URL}${doc.label === "Resume / CV" ? user.resume_url : user.aadhaar_url}`}
+                                                    target="_blank"
+                                                    className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 hover:text-primary-400"
+                                                >
+                                                    View
+                                                </a>
+                                            )}
                                             <label className={`btn-secondary !py-1.5 !px-4 text-xs flex items-center gap-1.5 ${docUploading === doc.label ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}>
                                                 {docUploading === doc.label ? <Spinner size={12} /> : <Upload className="w-3.5 h-3.5" />}
                                                 {docUploading === doc.label ? "Uploading..." : "Upload"}
