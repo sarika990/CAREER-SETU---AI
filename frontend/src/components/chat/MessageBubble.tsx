@@ -1,6 +1,8 @@
 "use client";
 
 import { BASE_BACKEND_URL } from "@/lib/api";
+import { motion } from "framer-motion";
+import { MapPin, ExternalLink, Play, CheckCheck } from "lucide-react";
 
 interface MessageBubbleProps {
     message: any;

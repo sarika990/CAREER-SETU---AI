@@ -22,7 +22,10 @@ async def verify_db():
     users_with_docs = await db["users"].find({"$or": [{"resume_url": {"$exists": True}}, {"aadhaar_url": {"$exists": True}}]}).to_list(10)
     print(f"Users with Resume/Aadhaar: {len(users_with_docs)}")
     for u in users_with_docs:
-        print(f" - {u['email']}: Resume={u.get('resume_url')}, Aadhaar={u.get('aadhaar_url')}")
+        print(f" - {u['email']}:")
+        print(f"   Resume: {u.get('resume_url')}")
+        print(f"   Aadhaar: {u.get('aadhaar_url')}")
+        print(f"   Photo: {u.get('profile_photo')}")
         
     # 3. Check Worker Profiles Portfolio
     worker_count = await db["worker_profiles"].count_documents({})

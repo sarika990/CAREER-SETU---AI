@@ -91,7 +91,7 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
     return response.json();
 }
 
-const uploadFile = async (file: File, endpoint: string = "/chat/upload"): Promise<{url: string, filename: string}> => {
+const uploadFile = async (file: File, endpoint: string = "/chat/upload"): Promise<any> => {
     const formData = new FormData();
     formData.append("file", file);
     const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;

@@ -110,7 +110,7 @@ async def startup_db_client():
         "professional_profiles",
         "customer_profiles",
         "service_requests",
-        "chat_messages",
+        "chats",
         "reviews",
     ]
     existing = await db.list_collection_names()
@@ -128,6 +128,8 @@ async def startup_db_client():
         await db["worker_profiles"].create_index("user_id", unique=True, sparse=True)
         await db["service_requests"].create_index("customer_id")
         await db["service_requests"].create_index("worker_id")
+        await db["chats"].create_index([("sender_id", 1), ("receiver_id", 1)])
+        await db["chats"].create_index("timestamp")
         logger.info("✅ MongoDB indexes verified/created successfully.")
     except Exception as e:
         logger.warning(f"⚠️ Index creation warning (non-fatal): {e}")
