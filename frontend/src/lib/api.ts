@@ -14,8 +14,9 @@ const getBaseUrl = (): string => {
         return url;
     }
     
-    // 3. Robust Hostname-based Detection for Render
-    if (typeof window !== "undefined" && window.location.hostname.includes("onrender.com")) {
+    // 3. Robust Hostname-based Detection for Render (Client & Server side)
+    const isRender = (typeof window !== "undefined" && window.location.hostname.includes("onrender.com")) || process.env.RENDER === "true";
+    if (isRender) {
         return PRODUCTION_BACKEND_URL;
     }
     
