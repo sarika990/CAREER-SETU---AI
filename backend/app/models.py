@@ -18,6 +18,9 @@ class UserProfile(BaseModel):
     skills: List[str] = []
     interests: List[str] = []
     bio: Optional[str] = None
+    profile_photo: Optional[str] = None
+    resume_url: Optional[str] = None
+    aadhaar_url: Optional[str] = None
     role: UserRole = UserRole.PROFESSIONAL
     is_verified: bool = False
     aadhaar_verified: bool = False

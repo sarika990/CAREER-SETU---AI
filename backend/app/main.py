@@ -207,7 +207,10 @@ async def register(profile: UserRegistration):
     # Fix: Ensure we get the raw string from SecretStr for hashing
     user_dict["password"] = get_password_hash(profile.password.get_secret_value())
     user_dict.pop("otp", None)  # Remove OTP from DB payload
-    user_dict["is_verified"] = True # Mark verified as we passed the OTP check
+    user_dict["is_verified"] = False
+    user_dict["aadhaar_url"] = None
+    user_dict["resume_url"] = None
+    user_dict["profile_photo"] = None
     
     result = await db["users"].insert_one(user_dict)
     

@@ -91,7 +91,31 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
     return response.json();
 }
 
+const uploadFile = async (file: File, endpoint: string = "/chat/upload"): Promise<{url: string, filename: string}> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+    
+    // Ensure accurate URL construction
+    const url = endpoint.startsWith("http") ? endpoint : `${API_URL}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+    
+    const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
+    });
+    
+    if (!response.ok) {
+        const err = await response.text();
+        throw new Error(err || "Upload failed");
+    }
+    return response.json();
+};
+
 export const api = {
+    // Shared Upload
+    uploadFile,
+
     // Auth
     register: (data: any) => fetchWithAuth("/auth/register", { method: "POST", body: JSON.stringify(data) }),
     login: (credentials: any) => fetchWithAuth("/auth/login", { method: "POST", body: JSON.stringify(credentials) }),
@@ -107,17 +131,7 @@ export const api = {
     getJobs: (location?: string) => fetchWithAuth(`/jobs${location ? `?location=${location}` : ""}`),
 
     // Resume
-    analyzeResume: async (file: File) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        const token = localStorage.getItem("token");
-        const response = await fetch(`${API_URL}/resume/analyze`, {
-            method: "POST",
-            body: formData,
-            headers: token ? { "Authorization": `Bearer ${token}` } : {},
-        });
-        return response.json();
-    },
+    analyzeResume: (file: File) => api.uploadFile(file, "/resume/analyze"),
 
     // Interview
     startInterview: (roleId: string) => fetchWithAuth("/interview/start", { method: "POST", body: JSON.stringify({ role_id: roleId }) }),
@@ -128,36 +142,8 @@ export const api = {
     getWorkerProfile: () => fetchWithAuth("/worker/profile"),
     updateWorkerProfile: (data: any) => fetchWithAuth("/worker/profile/update", { method: "POST", body: JSON.stringify(data) }),
     getWorkerRequests: () => fetchWithAuth("/worker/requests"),
-    uploadWorkerWork: async (file: File) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
-        const response = await fetch(`${API_URL}/worker/upload-work`, {
-            method: "POST",
-            body: formData,
-            headers: token ? { "Authorization": `Bearer ${token}` } : {},
-        });
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new Error(errBody || "Upload failed");
-        }
-        return response.json();
-    },
-    uploadProfilePhoto: async (file: File) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
-        const response = await fetch(`${API_URL}/chat/upload`, {
-            method: "POST",
-            body: formData,
-            headers: token ? { "Authorization": `Bearer ${token}` } : {},
-        });
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new Error(errBody || "Upload failed");
-        }
-        return response.json();
-    },
+    uploadWorkerWork: (file: File) => api.uploadFile(file, "/worker/upload-work"),
+    uploadProfilePhoto: (file: File) => api.uploadFile(file, "/chat/upload"),
 
     // Customer Dashboard (New)
     discoverServices: (query?: string) => fetchWithAuth(`/customer/services${query ? `?query=${query}` : ""}`),
@@ -181,21 +167,7 @@ export const api = {
         const token = localStorage.getItem("token");
         return fetchWithAuth(`/chat/history/${receiverEmail}?token=${token}`);
     },
-    uploadChatMedia: async (file: File) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        const token = localStorage.getItem("token");
-        const response = await fetch(`${API_URL}/chat/upload`, {
-            method: "POST",
-            body: formData,
-            headers: token ? { "Authorization": `Bearer ${token}` } : {},
-        });
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new Error(errBody || "Upload request failed");
-        }
-        return response.json();
-    },
+    uploadChatMedia: (file: File) => api.uploadFile(file, "/chat/upload"),
 
     // Identity & Verification (New)
     verifyIdentity: (docType: string, docNum: string) => fetchWithAuth("/identity/verify", { 

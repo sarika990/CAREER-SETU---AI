@@ -110,6 +110,7 @@ export default function ProfessionalDashboard({ user }: { user: any }) {
         portfolio_url: user?.portfolio_url || "",
         mentorship_available: user?.professional_info?.mentorship_available || false,
     });
+    const [docUploading, setDocUploading] = useState<string | null>(null);
     const [projects, setProjects] = useState<Project[]>(user?.professional_info?.professional_projects || []);
     const [education, setEducation] = useState<Education[]>(
         user?.professional_info?.education_history || [
@@ -179,6 +180,23 @@ export default function ProfessionalDashboard({ user }: { user: any }) {
             notify("error", "Save Failed", err?.message || "Please try again.");
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleDocUpload = async (type: "resume" | "aadhaar", file: File) => {
+        setDocUploading(type);
+        try {
+            const res = await api.uploadChatMedia(file);
+            if (res.url) {
+                const field = type === "resume" ? "resume_url" : "aadhaar_url";
+                await api.updateProfile({ [field]: res.url });
+                notify("success", "Document Saved", `${type === 'resume' ? 'Resume' : 'Aadhaar Card'} uploaded successfully.`);
+                window.location.reload(); // Refresh to show
+            }
+        } catch (err: any) {
+            notify("error", "Upload Failed", err?.message);
+        } finally {
+            setDocUploading(null);
         }
     };
 
@@ -583,6 +601,56 @@ export default function ProfessionalDashboard({ user }: { user: any }) {
                             </Link>
                         </div>
                     </div>
+
+                    {/* ── Identity & Academic Verification ── */}
+                    <motion.section 
+                        className="gsap-card glass-card p-6 border-l-4 border-primary-500 bg-white/5 space-y-4"
+                    >
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <CheckCircle2 className="w-5 h-5 text-primary-400" /> Identity & Academic Documents
+                            </h3>
+                        </div>
+                        <p className="text-xs text-dark-400">Maintain your professional authority by providing document proof of your credentials.</p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {[
+                                { label: "Resume / CV (PDF)", key: "resume" as const, current: user?.resume_url },
+                                { label: "Identity Proof (Aadhaar/PAN)", key: "aadhaar" as const, current: user?.aadhaar_url }
+                            ].map(doc => (
+                                <div key={doc.key} className="p-4 rounded-xl bg-white/3 border border-white/5 flex flex-col justify-between">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] font-bold text-dark-400 uppercase tracking-widest">{doc.label}</p>
+                                            {doc.current ? (
+                                                <p className="text-[10px] text-accent-emerald flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> Verified Upload</p>
+                                            ) : (
+                                                <p className="text-[10px] text-dark-500 italic">Not uploaded yet</p>
+                                            )}
+                                        </div>
+                                        {doc.current && (
+                                            <a href={doc.current.startsWith('http') ? doc.current : `${BASE_BACKEND_URL}${doc.current}`} target="_blank" className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-primary-400 transition-all">
+                                                <ArrowUpRight className="w-3.5 h-3.5" />
+                                            </a>
+                                        )}
+                                    </div>
+                                    <label className={`btn-secondary w-full !py-1.5 text-[10px] flex items-center justify-center gap-2 ${docUploading === doc.key ? "opacity-50" : "cursor-pointer hover:bg-white/10"}`}>
+                                        {docUploading === doc.key ? <Spinner size={12} /> : <FileText className="w-3.5 h-3.5" />}
+                                        {doc.current ? "Change File" : "Upload File"}
+                                        <input 
+                                            type="file" 
+                                            className="hidden" 
+                                            onChange={(e) => {
+                                                const f = e.target.files?.[0];
+                                                if (f) handleDocUpload(doc.key, f);
+                                            }}
+                                            disabled={!!docUploading}
+                                        />
+                                    </label>
+                                </div>
+                            ))}
+                        </div>
+                    </motion.section>
 
                     {/* ── Skills ── */}
                     {stats.skills.length > 0 && (

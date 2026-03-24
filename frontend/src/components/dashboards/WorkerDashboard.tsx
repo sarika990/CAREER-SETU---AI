@@ -24,6 +24,7 @@ export default function WorkerDashboard({ user }: { user: any }) {
     const [workerStats, setWorkerStats] = useState<any>(null);
     const [aadhaar, setAadhaar] = useState("");
     const [verifying, setVerifying] = useState(false);
+    const [docUploading, setDocUploading] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
     const [showProfileEditor, setShowProfileEditor] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -84,13 +85,34 @@ export default function WorkerDashboard({ user }: { user: any }) {
         speak(phrases.VERIFY_AADHAAR_PROMPT);
         try {
             await api.verifyAadhaar(aadhaar);
-            notify("success", "Identity Verified!", "You can now receive premium job requests.");
+            const updated = await api.getProfile(); // Refresh main user
+            notify("success", "Identity Verified", "Your Aadhaar number has been verified.");
             speak(phrases.VERIFY_SUCCESS);
             setTimeout(() => window.location.reload(), 2000);
         } catch (err: any) {
             notify("error", "Verification Failed", err?.message || "Check your Aadhaar number.");
         } finally {
             setVerifying(false);
+        }
+    };
+
+    const handleDocUpload = async (type: "resume" | "aadhaar", file: File) => {
+        setDocUploading(type);
+        try {
+            const res = await api.uploadChatMedia(file);
+            if (res.url) {
+                const field = type === "resume" ? "resume_url" : "aadhaar_url";
+                await api.updateProfile({ [field]: res.url });
+                notify("success", "Document Saved", `${type === 'resume' ? 'Resume' : 'Aadhaar Card'} uploaded successfully.`);
+                const updated = await api.getProfile(); // Refresh
+                if (updated) {
+                    // Update local if needed
+                }
+            }
+        } catch (err: any) {
+            notify("error", "Upload Failed", err?.message);
+        } finally {
+            setDocUploading(null);
         }
     };
 
@@ -238,30 +260,65 @@ export default function WorkerDashboard({ user }: { user: any }) {
                 <motion.section
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="gsap-reveal glass-card p-5 border-l-4 border-accent-amber bg-accent-amber/5"
+                    className="gsap-reveal glass-card p-6 border-l-4 border-accent-emerald bg-white/5 space-y-6"
                 >
-                    <div className="flex items-start gap-4">
-                        <AlertCircle className="w-6 h-6 text-accent-amber flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                            <h3 className="font-bold text-white mb-1">Verify Your Identity</h3>
-                            <p className="text-sm text-dark-400 mb-4">Complete Aadhaar verification to start receiving job requests.</p>
-                            <div className="flex gap-3">
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <ShieldCheck className="w-5 h-5 text-accent-emerald" /> Identity & Documents
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Digital Verification */}
+                        <div className="space-y-4">
+                            <div>
+                                <h4 className="text-sm font-bold text-white mb-1">Digital Aadhaar Verification</h4>
+                                <p className="text-xs text-dark-400">Enter your 12-digit number for instant verification status.</p>
+                            </div>
+                            <div className="flex gap-2">
                                 <input
                                     type="text"
-                                    placeholder="Enter 12-digit Aadhaar"
-                                    maxLength={12}
+                                    placeholder="12-digit Aadhaar"
                                     value={aadhaar}
-                                    onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, ""))}
-                                    className="input-field !py-2 flex-1 font-mono tracking-widest max-w-xs"
+                                    onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                                    className="input-field flex-1 !py-2 font-mono"
                                 />
                                 <button
                                     onClick={handleAadhaarVerify}
-                                    disabled={verifying || aadhaar.length !== 12}
-                                    className="btn-primary !px-5 !py-2 text-sm flex items-center gap-2"
+                                    disabled={verifying || aadhaar.length !== 12 || user?.is_verified}
+                                    className="btn-primary text-xs !px-4 whitespace-nowrap"
                                 >
-                                    {verifying ? <><Spinner size={14} /> Verifying</> : "Verify Now"}
+                                    {verifying ? <Spinner size={14} /> : user?.is_verified ? "Verified" : "Verify Now"}
                                 </button>
                             </div>
+                        </div>
+
+                        {/* Document Uploads */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {[
+                                { label: "Aadhaar Card (Photo)", key: "aadhaar" as const, current: user?.aadhaar_url },
+                                { label: "Resume / CV (PDF)", key: "resume" as const, current: user?.resume_url }
+                            ].map(doc => (
+                                <div key={doc.key} className="p-4 rounded-xl bg-white/3 border border-white/5 space-y-3">
+                                    <div className="flex justify-between items-start">
+                                        <p className="text-[10px] font-bold text-dark-400 uppercase tracking-wider">{doc.label}</p>
+                                        {doc.current && (
+                                            <a href={doc.current.startsWith('http') ? doc.current : `${BASE_BACKEND_URL}${doc.current}`} target="_blank" className="text-[10px] text-primary-400 hover:underline">View</a>
+                                        )}
+                                    </div>
+                                    <label className={`btn-secondary w-full !py-2 text-[10px] flex items-center justify-center gap-2 ${docUploading === doc.key ? "opacity-50" : "cursor-pointer"}`}>
+                                        {docUploading === doc.key ? <Spinner size={12} /> : <Upload className="w-3.5 h-3.5" />}
+                                        {doc.current ? "Update" : "Upload"}
+                                        <input 
+                                            type="file" 
+                                            className="hidden" 
+                                            onChange={(e) => {
+                                                const f = e.target.files?.[0];
+                                                if (f) handleDocUpload(doc.key, f);
+                                            }}
+                                            disabled={!!docUploading}
+                                        />
+                                    </label>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </motion.section>
