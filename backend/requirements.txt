@@ -18,3 +18,5 @@ joblib
 motor
 firebase-admin
 email-validator
+python-socketio
+aiofiles

@@ -1,12 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-    ShieldCheck, Briefcase, MapPin, Star, Clock, CheckCircle2,
-    AlertCircle, User, Volume2, VolumeX, MessageSquare, Camera,
-    FileIcon, Upload, X, Phone, Mail, Edit3, Save, ChevronRight,
-    Loader2, Plus
-} from "lucide-react";
+import { Search, MapPin, Star, Clock, CheckCircle2, AlertCircle, User, Volume2, VolumeX, MessageSquare, Camera, FileIcon, Upload, X, Phone, Mail, Edit3, Save, ChevronRight, Loader2, Plus, ShieldCheck, Briefcase, Trophy, Flame, Shield, Hexagon } from "lucide-react";
 import Link from "next/link";
 import { api, BASE_BACKEND_URL } from "@/lib/api";
 import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
@@ -60,7 +55,41 @@ export default function WorkerDashboard({ user }: { user: any }) {
         }
     };
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { 
+        loadData(); 
+
+        const handleClaimed = (e: any) => {
+            const { id, worker_id } = e.detail;
+            // If someone else claimed it, remove it from our requests list
+            setRequests(prev => prev.filter(r => r._id !== id));
+        };
+
+        window.addEventListener("WORK_REQUEST_CLAIMED", handleClaimed);
+        return () => window.removeEventListener("WORK_REQUEST_CLAIMED", handleClaimed);
+    }, []);
+
+    const handleAcceptJob = async (id: string) => {
+        try {
+            await api.updateWorkerRequestStatus(id, "accepted");
+            speak(phrases.ACCEPT_JOB); 
+            notify("success", "Job Accepted", "The customer has been notified. You can now start the work.");
+            // Refresh list
+            loadData();
+        } catch (err: any) {
+            notify("error", "Failed to accept", err.message);
+        }
+    };
+
+    const handleStatusUpdate = async (id: string, status: string) => {
+        try {
+            await api.updateWorkerRequestStatus(id, status);
+            const msg = status === "in_progress" ? "Work Started" : "Work Completed";
+            notify("success", msg, `Job status updated to ${status.replace("_", " ")}`);
+            loadData();
+        } catch (err: any) {
+            notify("error", "Failed to update status", err.message);
+        }
+    };
 
     const handlePortfolioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -378,35 +407,87 @@ export default function WorkerDashboard({ user }: { user: any }) {
                                             transition={{ delay: i * 0.06 }}
                                             className="glass-card p-5 hover:border-primary-500/30 transition-all group"
                                         >
-                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                <div className="flex-1">
-                                                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                        <span className="tag uppercase">{req.work_type}</span>
-                                                        <StatusBadge status={req.status || "pending"} />
-                                                        {req.location && (
-                                                            <span className="text-xs text-dark-500 flex items-center gap-1">
-                                                                <MapPin className="w-3 h-3" /> {req.location}
-                                                            </span>
-                                                        )}
+                                            <div className="flex flex-col gap-4 w-full">
+                                                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 w-full">
+                                                    <div className="flex-1">
+                                                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                            <span className="tag uppercase">{req.work_type}</span>
+                                                            <StatusBadge status={req.status || "pending"} />
+                                                            {req.location && (
+                                                                <span className="text-xs text-dark-500 flex items-center gap-1">
+                                                                    <MapPin className="w-3 h-3" /> {req.location}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-white font-semibold text-sm mb-1">{req.description}</p>
+                                                        <p className="text-xs text-dark-500 font-mono">Customer: {req.customer_id?.substring(0, 15)}...</p>
                                                     </div>
-                                                    <p className="text-white font-semibold text-sm mb-1">{req.description}</p>
-                                                    <p className="text-xs text-dark-500 font-mono">Customer: {req.customer_id?.substring(0, 15)}...</p>
-                                                </div>
-                                                <div className="flex items-center gap-4">
-                                                    <div className="text-right">
-                                                        <div className="text-lg font-bold text-accent-emerald">₹{req.budget}</div>
-                                                        <div className="text-[10px] text-dark-500 uppercase tracking-wider">Budget</div>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => { speak(phrases.ACCEPT_JOB); notify("info", "Job Accepted", "The customer has been notified."); }}
-                                                            className="btn-primary !px-4 !py-1.5 text-xs flex items-center gap-1"
-                                                        >
-                                                            Accept
-                                                        </button>
-                                                        <Link href="/chat" className="p-2 glass-card !rounded-xl text-dark-400 hover:text-white transition-all">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="text-right hidden sm:block">
+                                                            <div className="text-lg font-bold text-accent-emerald">₹{req.budget}</div>
+                                                            <div className="text-[10px] text-dark-500 uppercase tracking-wider">Budget</div>
+                                                        </div>
+                                                        <Link href="/chat" className="p-2 glass-card !rounded-xl text-dark-400 hover:text-white transition-all shrink-0">
                                                             <MessageSquare className="w-4 h-4" />
                                                         </Link>
+                                                    </div>
+                                                </div>
+
+                                                {/* Advanced Progress Tracker Timeline UI */}
+                                                <div className="mt-4 pt-4 border-t border-white/5">
+                                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                                                        <div className="flex items-center justify-between relative px-2 sm:px-4 w-full sm:w-2/3">
+                                                            <div className="absolute left-[10%] right-[10%] top-3 h-0.5 bg-dark-700 z-0 rounded-full overflow-hidden">
+                                                                <motion.div 
+                                                                    className="h-full bg-gradient-to-r from-primary-500 to-accent-emerald" 
+                                                                    initial={{ width: "0%" }}
+                                                                    animate={{ width: `${(Math.max(["pending", "accepted", "in_progress", "completed"].indexOf(req.status || "pending"), 0) / 3) * 100}%` }}
+                                                                    transition={{ duration: 0.8, ease: "easeOut" }}
+                                                                />
+                                                            </div>
+                                                            {[
+                                                                { key: 'pending', label: 'Requested', icon: Clock },
+                                                                { key: 'accepted', label: 'Accepted', icon: User },
+                                                                { key: 'in_progress', label: 'In Progress', icon: Briefcase },
+                                                                { key: 'completed', label: 'Completed', icon: CheckCircle2 }
+                                                            ].map((step, idx) => {
+                                                                const currentStepIndex = ["pending", "accepted", "in_progress", "completed"].indexOf(req.status || "pending");
+                                                                const isCompleted = currentStepIndex >= idx;
+                                                                const isCurrent = currentStepIndex === idx;
+                                                                return (
+                                                                    <div key={step.key} className="relative z-10 flex flex-col items-center gap-2">
+                                                                        <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${isCompleted ? 'bg-primary-500 border-primary-400 shadow-[0_0_15px_rgba(99,102,241,0.5)]' : 'bg-dark-800 border-dark-600'}`}>
+                                                                            <step.icon className={`w-3 h-3 sm:w-4 sm:h-4 ${isCompleted ? 'text-white' : 'text-dark-500'} ${isCurrent && idx !== 3 ? 'animate-pulse' : ''}`} />
+                                                                        </div>
+                                                                        <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider hidden sm:block md:block lg:block ${isCompleted ? 'text-white' : 'text-dark-500'}`}>{step.label}</span>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+
+                                                        {/* Dynamic Actions */}
+                                                        <div className="w-full sm:w-auto shrink-0 flex justify-end">
+                                                            {req.status === "pending" && (
+                                                                <button onClick={() => handleAcceptJob(req._id)} className="btn-primary w-full sm:w-auto !px-6 !py-2 text-sm uppercase tracking-widest font-bold">
+                                                                    Accept Job
+                                                                </button>
+                                                            )}
+                                                            {req.status === "accepted" && (
+                                                                <button onClick={() => handleStatusUpdate(req._id, "in_progress")} className="btn-secondary w-full sm:w-auto !px-6 !py-2 text-sm uppercase tracking-widest font-bold text-accent-cyan border-accent-cyan/30 hover:bg-accent-cyan hover:text-dark-950">
+                                                                    Start Work
+                                                                </button>
+                                                            )}
+                                                            {req.status === "in_progress" && (
+                                                                <button onClick={() => handleStatusUpdate(req._id, "completed")} className="btn-secondary w-full sm:w-auto !px-6 !py-2 text-sm uppercase tracking-widest font-bold text-accent-emerald border-accent-emerald/30 hover:bg-accent-emerald hover:text-dark-950 animate-pulse">
+                                                                    Mark Complete
+                                                                </button>
+                                                            )}
+                                                            {req.status === "completed" && (
+                                                                <span className="text-sm font-bold text-accent-emerald uppercase tracking-widest flex items-center gap-2">
+                                                                    <CheckCircle2 className="w-5 h-5" /> Done
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -559,6 +640,44 @@ export default function WorkerDashboard({ user }: { user: any }) {
                                     <span className={`font-bold text-xs uppercase tracking-wider ${item.color}`}>{item.value}</span>
                                 </div>
                             ))}
+                        </div>
+                    </motion.section>
+
+                    {/* Trust Score & Gamification Panel */}
+                    <motion.section className="glass-card p-5 border-l-4 border-accent-cyan bg-accent-cyan/5 relative overflow-hidden" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}>
+                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                            <Shield className="w-24 h-24 text-accent-cyan" />
+                        </div>
+                        <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider flex items-center gap-2">
+                            <Shield className="w-4 h-4 text-accent-cyan" /> Trust Score
+                        </h3>
+                        
+                        <div className="flex items-center gap-4 mb-5">
+                            <div className="flex-1 bg-dark-800 rounded-full h-2.5 overflow-hidden">
+                                <motion.div 
+                                    className="bg-gradient-to-r from-accent-cyan to-primary-500 h-full" 
+                                    initial={{ width: 0 }} 
+                                    animate={{ width: `${Math.min(((workerStats?.rating || 4.2) / 5) * 100, 100)}%` }} 
+                                    transition={{ duration: 1, delay: 0.5 }}
+                                />
+                            </div>
+                            <span className="text-accent-cyan font-bold text-lg">{workerStats?.rating || 4.2} <span className="text-xs text-dark-500 font-normal">/ 5.0</span></span>
+                        </div>
+
+                        <h4 className="text-xs font-bold text-dark-300 mb-3 uppercase tracking-wider border-t border-white/5 pt-4">Your Badges</h4>
+                        <div className="grid grid-cols-3 gap-2">
+                            <div className="flex flex-col items-center gap-2 p-3 rounded-xl bg-slate-900 border border-white/5 relative group cursor-default">
+                                <Trophy className="w-6 h-6 text-accent-amber drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                                <span className="text-[9px] font-bold text-dark-300 uppercase tracking-wider text-center">Top Rated</span>
+                            </div>
+                            <div className="flex flex-col items-center gap-2 p-3 rounded-xl bg-slate-900 border border-white/5 relative group cursor-default">
+                                <Flame className="w-6 h-6 text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                                <span className="text-[9px] font-bold text-dark-300 uppercase tracking-wider text-center">Fast Worker</span>
+                            </div>
+                            <div className="flex flex-col items-center gap-2 p-3 rounded-xl bg-slate-900 border border-white/5 relative group cursor-default">
+                                <Hexagon className="w-6 h-6 text-accent-emerald drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                <span className="text-[9px] font-bold text-dark-300 uppercase tracking-wider text-center">Verified ID</span>
+                            </div>
                         </div>
                     </motion.section>
 

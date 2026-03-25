@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Search, MapPin, Star, Plus, Clock, CheckCircle2, ChevronRight, Sparkles, MessageSquare, AlertCircle, X, Loader2 } from "lucide-react";
+import { Search, MapPin, Star, Plus, Clock, CheckCircle2, ChevronRight, Sparkles, MessageSquare, AlertCircle, X, Loader2, User, Briefcase } from "lucide-react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { api, BASE_BACKEND_URL } from "@/lib/api";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -41,6 +42,19 @@ export default function CustomerDashboard({ user }: { user: any }) {
 
     useEffect(() => {
         loadData();
+
+        // Real-time update listener
+        const handleUpdate = (e: any) => {
+            const update = e.detail;
+            setRequests(prev => prev.map(req => 
+                req._id === update.id ? { ...req, status: update.status } : req
+            ));
+            // Reload stats to keep counter in sync
+            api.getCustomerStats().then(setStats).catch(() => {});
+        };
+
+        window.addEventListener("WORK_REQUEST_UPDATE", handleUpdate);
+        return () => window.removeEventListener("WORK_REQUEST_UPDATE", handleUpdate);
     }, []);
 
     useEffect(() => {
@@ -307,32 +321,73 @@ export default function CustomerDashboard({ user }: { user: any }) {
                                     </button>
                                 </div>
                             ) : (
-                                requests.map((req, i) => (
-                                    <div key={req._id || i} className="glass-card p-5 flex items-center justify-between border-l-4 border-primary-500 bg-primary-500/5 hover:bg-white/5 transition-all">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h4 className="text-white font-bold tracking-tight">{req.work_type}</h4>
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${
-                                                    req.status === "completed"
-                                                        ? "bg-accent-emerald/10 border-accent-emerald/30 text-accent-emerald"
-                                                        : req.status === "accepted"
-                                                        ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                                                        : "bg-accent-amber/10 border-accent-amber/30 text-accent-amber"
-                                                }`}>{req.status}</span>
+                                <div className="space-y-6">
+                                    {requests.map((req, i) => {
+                                        // Determine timeline step based on status
+                                        const statuses = ["pending", "accepted", "in_progress", "completed"];
+                                        const currentStepIndex = statuses.indexOf(req.status || "pending");
+                                        
+                                        return (
+                                        <div key={req._id || i} className="glass-card p-5 border-l-4 border-primary-500 bg-primary-500/5 hover:bg-white/5 transition-all group">
+                                            <div className="flex items-start justify-between mb-4">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <h4 className="text-white font-bold tracking-tight text-lg">{req.work_type}</h4>
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${
+                                                            req.status === "completed"
+                                                                ? "bg-accent-emerald/10 border-accent-emerald/30 text-accent-emerald"
+                                                                : req.status === "accepted" || req.status === "in_progress"
+                                                                ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                                                                : "bg-accent-amber/10 border-accent-amber/30 text-accent-amber"
+                                                        }`}>{req.status}</span>
+                                                    </div>
+                                                    <p className="text-sm text-dark-300 mb-2 line-clamp-2">{req.description}</p>
+                                                    <div className="flex flex-wrap items-center gap-4 text-xs text-dark-400 font-medium">
+                                                        <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-primary-400" /> {req.location}</span>
+                                                        <span className="flex items-center gap-1 text-accent-emerald bg-accent-emerald/10 px-2 py-1 rounded-md font-bold text-sm">₹{req.budget}</span>
+                                                        {req.worker_id && <span className="flex items-center gap-1 text-accent-cyan"><User className="w-3.5 h-3.5" /> Assigned to Worker</span>}
+                                                    </div>
+                                                </div>
+                                                {req.worker_id && (
+                                                    <Link href={`/chat`} className="btn-secondary !p-2 rounded-xl group-hover:bg-primary-500 group-hover:text-white transition-all shrink-0">
+                                                        <MessageSquare className="w-5 h-5 group-hover:fill-current" />
+                                                    </Link>
+                                                )}
                                             </div>
-                                            <p className="text-xs text-dark-400 mb-1 line-clamp-1">{req.description}</p>
-                                            <p className="text-xs text-dark-500 font-mono uppercase flex items-center gap-1">
-                                                <MapPin className="w-3 h-3" /> {req.location}
-                                                <span className="ml-3 text-accent-emerald font-bold">₹{req.budget}</span>
-                                            </p>
+
+                                            {/* Advanced Progress Tracker Timeline UI */}
+                                            <div className="mt-6 pt-5 border-t border-white/5">
+                                                <div className="flex items-center justify-between relative px-2 sm:px-4">
+                                                    <div className="absolute left-[10%] right-[10%] top-3 h-0.5 bg-dark-700 z-0 rounded-full overflow-hidden">
+                                                        <motion.div 
+                                                            className="h-full bg-gradient-to-r from-primary-500 to-accent-emerald" 
+                                                            initial={{ width: "0%" }}
+                                                            animate={{ width: `${(Math.max(currentStepIndex, 0) / 3) * 100}%` }}
+                                                            transition={{ duration: 0.8, ease: "easeOut" }}
+                                                        />
+                                                    </div>
+                                                    {[
+                                                        { key: 'pending', label: 'Requested', icon: Clock },
+                                                        { key: 'accepted', label: 'Accepted', icon: User },
+                                                        { key: 'in_progress', label: 'In Progress', icon: Briefcase },
+                                                        { key: 'completed', label: 'Completed', icon: CheckCircle2 }
+                                                    ].map((step, idx) => {
+                                                        const isCompleted = currentStepIndex >= idx;
+                                                        const isCurrent = currentStepIndex === idx;
+                                                        return (
+                                                            <div key={step.key} className="relative z-10 flex flex-col items-center gap-2">
+                                                                <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${isCompleted ? 'bg-primary-500 border-primary-400 shadow-[0_0_15px_rgba(99,102,241,0.5)]' : 'bg-dark-800 border-dark-600'}`}>
+                                                                    <step.icon className={`w-3 h-3 sm:w-4 sm:h-4 ${isCompleted ? 'text-white' : 'text-dark-500'} ${isCurrent && idx !== 3 ? 'animate-pulse' : ''}`} />
+                                                                </div>
+                                                                <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${isCompleted ? 'text-white' : 'text-dark-500'}`}>{step.label}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-2 ml-4">
-                                            <Link href="/chat" className="p-2 text-dark-400 hover:text-white transition-colors">
-                                                <MessageSquare className="w-5 h-5" />
-                                            </Link>
-                                        </div>
-                                    </div>
-                                ))
+                                    )})}
+                                </div>
                             )}
                         </div>
                     </section>

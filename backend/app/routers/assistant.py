@@ -32,9 +32,30 @@ async def process_assistant_query(
     Processes a voice query from the user. 
     Detects if it's a page explanation request or a general query.
     """
+    # Intent Detection
     transcript = data.get("transcript", "").lower()
     pathname = data.get("pathname", "/")
     
+    # 1. Profile Intent
+    if any(kw in transcript for kw in ["प्रोफाइल", "profile", "मेरी जानकारी", "my information"]):
+        return {
+            "intent": "action",
+            "action": "navigate",
+            "url": "/profile",
+            "response": "ज़रूर! मैं आपको प्रोफाइल पेज पर ले जा रहा हूँ।",
+            "success": True
+        }
+        
+    # 2. Request/Service Intent
+    if any(kw in transcript for kw in ["रिक्वेस्ट", "request", "मेरा काम", "my work"]):
+        return {
+            "intent": "action",
+            "action": "navigate",
+            "url": "/dashboard",
+            "response": "ज़रूर! यहाँ आपके सभी रिक्वेस्ट और उनके स्टेटस की जानकारी है।",
+            "success": True
+        }
+
     # PRIORITY LOGIC: 
     # 1. Detect if it's a question (General Query)
     # 2. If not a question, explain the page (Guidance)

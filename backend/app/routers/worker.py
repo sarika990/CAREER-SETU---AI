@@ -4,6 +4,9 @@ import os, shutil, uuid
 from ..models import WorkerProfile, UserRole, UserProfile
 from ..auth import RoleChecker, get_current_user_email
 from ..database import get_db
+from ..socket_manager import notify_user, broadcast_worker_update
+from bson import ObjectId
+from datetime import datetime
 
 router = APIRouter(prefix="/api/worker", tags=["Worker"])
 
@@ -124,3 +127,66 @@ async def get_incoming_requests(user: dict = Depends(worker_only)):
     for r in requests:
         r["_id"] = str(r["_id"])
     return requests
+@router.post("/requests/{request_id}/update-status")
+async def update_request_status(
+    request_id: str,
+    status: str = Body(..., embed=True),
+    user: dict = Depends(worker_only)
+):
+    """Update status of a service request (Accept, Progress, Complete)."""
+    db = get_db()
+    
+    # 1. Fetch current request
+    req_node = await db["service_requests"].find_one({"_id": ObjectId(request_id)})
+    if not req_node:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    # 2. Update status & worker_id (if accepting)
+    update_data: dict = {"status": status}
+    if status == "accepted":
+        update_data["worker_id"] = user["sub"]
+        update_data["accepted_at"] = datetime.utcnow()
+    elif status == "completed":
+        update_data["completed_at"] = datetime.utcnow()
+        # Gamification: Increase Trust Score and Earnings upon Completion
+        worker_id = req_node.get("worker_id", user["sub"])
+        budget_earned = float(req_node.get("budget", 0))
+        await db["worker_profiles"].update_one(
+            {"user_id": worker_id},
+            {
+                "$inc": {
+                    "total_earnings": budget_earned,
+                    "completed_jobs_count": 1,
+                    "trust_points": 50  # 50 Points for Gamification
+                },
+                "$min": {"rating": 5.0}  # Cap rating if needed
+            }
+        )
+        # Random fractional bump in rating for testing until real reviews are made
+        await db["worker_profiles"].update_one(
+            {"user_id": worker_id},
+            {"$inc": {"rating": 0.1}}
+        )
+        
+    # 3. Commit to DB
+    await db["service_requests"].update_one(
+        {"_id": ObjectId(request_id)},
+        {"$set": update_data}
+    )
+    
+    # 4. Trigger Real-time Event to Customer
+    customer_email = req_node.get("customer_id")
+    if customer_email:
+        await notify_user(customer_email, "request_update", {
+            "id": request_id,
+            "status": status,
+            "worker_id": user["sub"],
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": f"Your request has been {status}."
+        })
+        
+    # 5. Broadcast to other workers (if accepted, so they can hide it from their list)
+    if status == "accepted":
+        await broadcast_worker_update("request_claimed", {"id": request_id, "worker_id": user["sub"]})
+    
+    return {"status": status, "message": f"Work request marked as {status}."}

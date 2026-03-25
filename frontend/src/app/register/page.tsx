@@ -76,22 +76,28 @@ export default function RegisterPage() {
         e.preventDefault();
         
         // Handle Step Transition
-        if (step < 3) { 
+        if (form.role !== 'customer' && step < 3) { 
             setStep(step + 1); 
             return; 
         }
         
-        // At step 3: Register immediately
+        // Register immediately
         setLoading(true);
         setError("");
         try {
             const payload = {
                 ...form,
-                skills: form.selectedSkills,
+                skills: form.role === 'customer' ? [] : form.selectedSkills,
                 otp: "none"
             };
             const res = await api.register(payload);
             
+            if (form.role === 'customer') {
+                // Redirect to login for Customer
+                router.push("/login");
+                return;
+            }
+
             // Auto-Login: Save token and user info (Production Ready)
             if (res.access_token) {
                 localStorage.setItem("token", res.access_token);
@@ -126,15 +132,23 @@ export default function RegisterPage() {
                         <span className="text-2xl font-bold font-display text-white tracking-tight">Career Setu <span className="text-primary-400">AI</span></span>
                     </Link>
                     <h1 className="text-3xl font-bold font-display text-white">Create Account</h1>
-                    <p className="text-dark-400 text-sm mt-2 font-medium">Step {step} of 3 — {step === 1 ? "Basic Info" : step === 2 ? "Your Skills" : "Your Interests"}</p>
+                    {form.role === 'customer' ? (
+                        <p className="text-dark-400 text-sm mt-2 font-medium">Step 1 of 1 — Basic Info</p>
+                    ) : (
+                        <p className="text-dark-400 text-sm mt-2 font-medium">Step {step} of 3 — {step === 1 ? "Basic Info" : step === 2 ? "Your Skills" : "Your Interests"}</p>
+                    )}
                 </div>
                 </div>
 
                 {/* Progress Bar */}
                 <div className="flex gap-2 mb-6">
-                    {[1, 2, 3].map(s => (
-                        <div key={s} className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${s <= step ? "bg-gradient-to-r from-primary-500 to-accent-purple" : "bg-dark-800"}`} />
-                    ))}
+                    {form.role === 'customer' ? (
+                        <div className="flex-1 h-1.5 rounded-full bg-gradient-to-r from-primary-500 to-accent-purple" />
+                    ) : (
+                        [1, 2, 3].map(s => (
+                            <div key={s} className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${s <= step ? "bg-gradient-to-r from-primary-500 to-accent-purple" : "bg-dark-800"}`} />
+                        ))
+                    )}
                 </div>
 
                 <div className="glass-card p-8">
@@ -275,7 +289,7 @@ export default function RegisterPage() {
                             <button type="submit" disabled={loading}
                                 className="btn-primary flex-1 flex items-center justify-center gap-2 !py-3.5 disabled:opacity-50"
                             >
-                                {loading ? <div className="loader !w-5 !h-5" /> : <>{step === 3 ? "Complete Registration" : "Continue"} <ArrowRight className="w-4 h-4" /></>}
+                                {loading ? <div className="loader !w-5 !h-5" /> : <>{(form.role === 'customer' || step === 3) ? "Complete Registration" : "Continue"} <ArrowRight className="w-4 h-4" /></>}
                             </button>
                         </div>
                     </form>

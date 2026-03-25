@@ -12,8 +12,9 @@ import {
 } from "lucide-react";
 import { BASE_BACKEND_URL } from "@/lib/api";
 
-const TABS = ["overview", "professional", "social", "documents"] as const;
-type Tab = typeof TABS[number];
+const TABS_PROFESSIONAL = ["overview", "professional", "social", "documents"] as const;
+const TABS_CUSTOMER = ["overview", "verification"] as const;
+type Tab = typeof TABS_PROFESSIONAL[number] | typeof TABS_CUSTOMER[number];
 
 function ProfileSkeleton() {
     return (
@@ -287,7 +288,7 @@ export default function ProfilePage() {
                 {/* ─── Tabs ─── */}
                 <FadeIn delay={0.15}>
                     <div className="flex gap-2 p-1 glass-card !rounded-2xl mb-6 overflow-x-auto">
-                        {TABS.map(tab => (
+                        {(user.role === "customer" ? TABS_CUSTOMER : TABS_PROFESSIONAL).map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -377,6 +378,7 @@ export default function ProfilePage() {
                             </div>
 
                             {/* Quick Links */}
+                            {user.role !== "customer" && (
                             <div className="glass-card p-6">
                                 <h3 className="text-lg font-bold text-white mb-4">Quick Links</h3>
                                 <div className="grid sm:grid-cols-2 gap-3">
@@ -395,6 +397,7 @@ export default function ProfilePage() {
                                     ))}
                                 </div>
                             </div>
+                            )}
                         </motion.div>
                     )}
 
@@ -545,6 +548,63 @@ export default function ProfilePage() {
                                         {user?.is_verified
                                             ? "Your identity has been verified. You can access premium features."
                                             : "Complete Aadhaar verification in the Worker Dashboard to unlock premium features."}
+                                    </p>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* CUSTOMER VERIFICATION TAB */}
+                    {activeTab === "verification" && (
+                        <motion.div key="verification" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}>
+                            <div className="glass-card p-6">
+                                <h3 className="text-lg font-bold text-white mb-5 flex items-center gap-2">
+                                    <Shield className="w-5 h-5 text-accent-amber" /> Identity Verification
+                                </h3>
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-4 p-4 rounded-xl bg-white/3 border border-white/5 hover:border-white/10 transition-all">
+                                        <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
+                                            <FileText className="w-5 h-5 text-dark-400" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-white font-semibold text-sm">Aadhaar Card Details</p>
+                                            <p className="text-dark-500 text-xs">For customer identity verification</p>
+                                        </div>
+                                        {user.aadhaar_url && (
+                                            <a 
+                                                href={user.aadhaar_url?.startsWith('http') ? user.aadhaar_url : `${BASE_BACKEND_URL}${user.aadhaar_url}`}
+                                                target="_blank"
+                                                className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 hover:text-primary-400"
+                                            >
+                                                View
+                                            </a>
+                                        )}
+                                        <label className={`btn-secondary !py-1.5 !px-4 text-xs flex items-center gap-1.5 ${docUploading === "Aadhaar Card" ? "opacity-60 pointer-events-none" : "cursor-pointer"}`}>
+                                            {docUploading === "Aadhaar Card" ? <Spinner size={12} /> : <Upload className="w-3.5 h-3.5" />}
+                                            {docUploading === "Aadhaar Card" ? "Uploading..." : "Upload"}
+                                            <input 
+                                                type="file" 
+                                                className="hidden" 
+                                                accept="image/*,.pdf" 
+                                                onChange={(e) => {
+                                                    const f = e.target.files?.[0];
+                                                    if (f) handleDocumentUpload("Aadhaar Card", f);
+                                                }} 
+                                                disabled={!!docUploading}
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                                <div className="mt-6 p-4 rounded-xl bg-primary-500/5 border border-primary-500/20">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Check className="w-4 h-4 text-primary-400" />
+                                        <span className="text-sm font-bold text-white">Status</span>
+                                    </div>
+                                    <StatusBadge status={user?.is_verified ? "verified" : "unverified"} />
+                                    <p className="text-xs text-dark-400 mt-2">
+                                        {user?.is_verified
+                                            ? "Your identity has been verified."
+                                            : "Please upload your Aadhaar details so we can verify your identity."}
                                     </p>
                                 </div>
                             </div>

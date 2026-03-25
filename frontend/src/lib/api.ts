@@ -143,6 +143,7 @@ export const api = {
     getWorkerProfile: () => fetchWithAuth("/worker/profile"),
     updateWorkerProfile: (data: any) => fetchWithAuth("/worker/profile/update", { method: "POST", body: JSON.stringify(data) }),
     getWorkerRequests: () => fetchWithAuth("/worker/requests"),
+    updateWorkerRequestStatus: (requestId: string, status: string) => fetchWithAuth(`/worker/requests/${requestId}/update-status`, { method: "POST", body: JSON.stringify({ status }) }),
     uploadWorkerWork: (file: File) => api.uploadFile(file, "/worker/upload-work"),
     uploadProfilePhoto: (file: File) => api.uploadFile(file, "/chat/upload"),
 

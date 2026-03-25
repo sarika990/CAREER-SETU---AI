@@ -31,6 +31,7 @@ try:
     from .auth import get_password_hash, verify_password, create_access_token, get_current_user_email, RoleChecker
     from .services.firebase_service import verify_firebase_token
     from .routers import worker, customer, admin, chat, identity, assistant
+    from .socket_manager import socket_app
 except (ImportError, ValueError):
     # Fallback for direct execution or misconfigured PYTHONPATH
     from app.skill_extractor import SkillExtractor
@@ -47,6 +48,7 @@ except (ImportError, ValueError):
     from app.auth import get_password_hash, verify_password, create_access_token, get_current_user_email, RoleChecker
     from app.services.firebase_service import verify_firebase_token
     from app.routers import worker, customer, admin, chat, assistant
+    from app.socket_manager import socket_app
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -75,6 +77,8 @@ app.include_router(admin.router)
 app.include_router(chat.router)
 app.include_router(identity.router)
 app.include_router(assistant.router)
+
+# Real-time WebSocket Mount (Done at the bottom via wrap instead of mount)
 
 # CORS Configuration
 # NOTE: allow_credentials=True is only valid when allow_origins is NOT ["*"].
@@ -484,6 +488,15 @@ async def get_analytics_overview():
 @app.get("/analytics/districts")
 async def get_district_analytics(state: Optional[str] = None):
     return analytics_engine.get_district_stats(state)
+
+# Wrap FastAPI app with SocketIO ASGI App to properly handle websockets without Starlette mount routing errors
+import socketio
+try:
+    from .socket_manager import sio
+except ImportError:
+    from app.socket_manager import sio
+
+app = socketio.ASGIApp(socketio_server=sio, other_asgi_app=app, socketio_path="/ws/socket.io")
 
 if __name__ == "__main__":
     # Production configuration: Run with host 0.0.0.0 for public access, reload=False for performance
