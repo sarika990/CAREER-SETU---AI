@@ -40,3 +40,4 @@ backend/uploads/
 backend/data/*.db
 backend/ml_models/*.bin
 frontend/out/
+scratch/
