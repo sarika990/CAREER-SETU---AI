@@ -172,6 +172,8 @@ export const api = {
     uploadChatMedia: (file: File) => api.uploadFile(file, "/chat/upload"),
     getConnectionStatus: (targetEmail: string) => fetchWithAuth(`/chat/connection-status/${targetEmail}`),
     getPendingRequests: () => fetchWithAuth(`/chat/requests/pending`),
+    sendChatRequest: (receiverEmail: string) => fetchWithAuth("/chat/requests/send", { method: "POST", body: JSON.stringify({ receiver_email: receiverEmail }) }),
+    respondChatRequest: (requesterEmail: string, status: string) => fetchWithAuth("/chat/requests/respond", { method: "POST", body: JSON.stringify({ requester_email: requesterEmail, status }) }),
 
     // Identity & Verification (New)
     verifyIdentity: (docType: string, docNum: string) => fetchWithAuth("/identity/verify", { 

@@ -21,18 +21,48 @@ sio = socketio.AsyncServer(
 # ASGI Application (mount this in main.py)
 socket_app = socketio.ASGIApp(sio)
 
-# Mapping of user_email -> {sid, email, name, role}
+# Mapping of user_email -> {sid, email, name, role, last_seen}
 user_sessions: Dict[str, dict] = {}
+import asyncio
 
 async def broadcast_active_users():
+    # Only send minimal data to speed up processing
     active_users = []
     for email, info in user_sessions.items():
         active_users.append({
             "email": email,
             "name": info.get("name", "Unknown"),
-            "role": info.get("role", "member")
+            "role": info.get("role", "member"),
+            "status": "online"
         })
     await sio.emit("active_users", active_users)
+
+@sio.event
+async def heartbeat(sid, data):
+    """
+    Update the last_seen timestamp for a user.
+    """
+    email = data.get("email")
+    if email and email in user_sessions:
+        user_sessions[email]["last_seen"] = datetime.utcnow()
+        # No broadcast here to avoid chatty network, just internal tracking
+        # Could occasionally purge dead sessions if needed
+        pass
+
+@sio.event
+async def get_active_users(sid):
+    """
+    On-demand fetch active users for a newly connected/mounted client.
+    """
+    active_users = []
+    for email, info in user_sessions.items():
+        active_users.append({
+            "email": email,
+            "name": info.get("name", "Unknown"),
+            "role": info.get("role", "member"),
+            "status": "online"
+        })
+    await sio.emit("active_users", active_users, room=sid)
 
 @sio.event
 async def connect(sid, environ):
@@ -91,41 +121,39 @@ async def chat_request(sid, data):
     if not receiver_email:
         return
         
-    db = get_db()
-    conn = await db["chat_connections"].find_one({
-        "$or": [
-            {"user1": sender_email, "user2": receiver_email},
-            {"user1": receiver_email, "user2": sender_email}
-        ]
-    })
-    
-    if not conn:
-        await db["chat_connections"].insert_one({
-            "user1": sender_email,
-            "user2": receiver_email,
-            "status": "pending",
-            "requested_by": sender_email,
-            "timestamp": datetime.utcnow()
-        })
-    elif conn["status"] == "declined":
-        await db["chat_connections"].update_one(
-            {"_id": conn["_id"]},
-            {"$set": {"status": "pending", "requested_by": sender_email, "timestamp": datetime.utcnow()}}
-        )
-    elif conn["status"] == "accepted":
-        # Already accepted, notify sender to proceed
-        await sio.emit("chat_request_updated", {
-            "receiver_email": receiver_email,
-            "status": "accepted"
-        }, room=sid)
-        return
-        
+    # Direct Emit Strategy: Notify receiver immediately before DB confirms (Optimistic)
     receiver_info = user_sessions.get(receiver_email)
     if receiver_info:
         await sio.emit("chat_request_received", {
             "requester_email": sender_email,
             "requester_name": sender_info.get("name", sender_email)
         }, room=receiver_info["sid"])
+
+    # DB write happens in background for speed
+    async def save_request():
+        db = get_db()
+        conn = await db["chat_connections"].find_one({
+            "$or": [
+                {"user1": sender_email, "user2": receiver_email},
+                {"user1": receiver_email, "user2": sender_email}
+            ]
+        })
+        
+        if not conn:
+            await db["chat_connections"].insert_one({
+                "user1": sender_email,
+                "user2": receiver_email,
+                "status": "pending",
+                "requested_by": sender_email,
+                "timestamp": datetime.utcnow()
+            })
+        elif conn["status"] == "declined":
+            await db["chat_connections"].update_one(
+                {"_id": conn["_id"]},
+                {"$set": {"status": "pending", "requested_by": sender_email, "timestamp": datetime.utcnow()}}
+            )
+            
+    asyncio.create_task(save_request())
 
     # Confirm to sender it is pending
     await sio.emit("chat_request_updated", {

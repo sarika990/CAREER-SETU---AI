@@ -2,12 +2,21 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, UploadFi
 from typing import Dict, List, Optional
 from ..auth import decode_access_token, get_current_user_email
 from ..database import get_db
+from ..socket_manager import sio, user_sessions
+from pydantic import BaseModel
 from datetime import datetime
 import os
 import shutil
 import uuid
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
+
+class ChatRequestPayload(BaseModel):
+    receiver_email: str
+
+class ChatResponsePayload(BaseModel):
+    requester_email: str
+    status: str
 
 # Ensure upload directory exists
 UPLOAD_DIR = "uploads/chat"
@@ -78,6 +87,93 @@ async def get_pending_requests(current_email: str = Depends(get_current_user_ema
         })
     return formatted_requests
 
+@router.post("/requests/send")
+async def send_chat_request(payload: ChatRequestPayload, current_email: str = Depends(get_current_user_email)):
+    db = get_db()
+    
+    sender_info = user_sessions.get(current_email, {})
+    receiver_email = payload.receiver_email
+    
+    conn = await db["chat_connections"].find_one({
+        "$or": [
+            {"user1": current_email, "user2": receiver_email},
+            {"user1": receiver_email, "user2": current_email}
+        ]
+    })
+    
+    if not conn:
+        await db["chat_connections"].insert_one({
+            "user1": current_email,
+            "user2": receiver_email,
+            "status": "pending",
+            "requested_by": current_email,
+            "timestamp": datetime.utcnow()
+        })
+    elif conn["status"] == "declined":
+        await db["chat_connections"].update_one(
+            {"_id": conn["_id"]},
+            {"$set": {"status": "pending", "requested_by": current_email, "timestamp": datetime.utcnow()}}
+        )
+    elif conn["status"] == "accepted":
+        return {"status": "already_accepted"}
+        
+    # Notify Receiver via socket if online
+    receiver_info = user_sessions.get(receiver_email)
+    if receiver_info:
+        print(f"Backend Log: Emitting 'chat_request_received' to {receiver_email}")
+        # Note: calling await sio.emit works flawlessly from within the event loop
+        await sio.emit("chat_request_received", {
+            "requester_email": current_email,
+            "requester_name": sender_info.get("name", current_email)
+        }, room=receiver_info["sid"])
+
+    print(f"Backend Log: Request from {current_email} to {receiver_email} sent successfully")
+    return {"status": "success", "message": "Request sent"}
+
+@router.post("/requests/respond")
+async def respond_chat_request(payload: ChatResponsePayload, current_email: str = Depends(get_current_user_email)):
+    db = get_db()
+    
+    requester_email = payload.requester_email
+    status = payload.status
+    
+    if status not in ["accepted", "declined"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+        
+    conn = await db["chat_connections"].find_one({
+        "$or": [
+            {"user1": requester_email, "user2": current_email},
+            {"user1": current_email, "user2": requester_email}
+        ]
+    })
+    
+    if conn and conn["status"] == "pending":
+        await db["chat_connections"].update_one(
+            {"_id": conn["_id"]},
+            {"$set": {"status": status, "timestamp": datetime.utcnow()}}
+        )
+        
+        # Notify requester (A)
+        requester_info = user_sessions.get(requester_email)
+        if requester_info:
+            print(f"Backend Log: Emitting 'chat_request_updated' ({status}) to requester: {requester_email}")
+            await sio.emit("chat_request_updated", {
+                "receiver_email": current_email,
+                "status": status
+            }, room=requester_info["sid"])
+        
+        # Also notify receiver (B, the current user) on their active sockets
+        current_user_info = user_sessions.get(current_email)
+        if current_user_info:
+            print(f"Backend Log: Emitting 'chat_request_updated' ({status}) to receiver: {current_email}")
+            await sio.emit("chat_request_updated", {
+                "receiver_email": requester_email,
+                "status": status
+            }, room=current_user_info["sid"])
+            
+    print(f"Backend Log: Request handled, status: {status}")
+    return {"status": "success", "handled_status": status}
+
 @router.get("/history/{receiver_email}")
 async def get_chat_history(receiver_email: str, token: str):
     payload = decode_access_token(token)
@@ -124,19 +220,21 @@ async def get_chat_users(
 
 @router.get("/conversations")
 async def get_conversations(current_email: str = Depends(get_current_user_email)):
-    """ Returns a list of users the current user has chatted with. """
+    """ Returns a list of users the current user is connected with (Accepted Chats). """
     db = get_db()
-    # Find unique receiver_ids where sender is current_email OR unique sender_ids where receiver is current_email
-    chats = await db["messages"].find({
-        "$or": [{"sender_id": current_email}, {"receiver_id": current_email}]
+    
+    # Find connections where current_email is either user1 or user2 AND status is accepted
+    connections = await db["chat_connections"].find({
+        "$or": [{"user1": current_email}, {"user2": current_email}],
+        "status": "accepted"
     }).sort("timestamp", -1).to_list(length=1000)
     
     other_emails = set()
-    for c in chats:
-        if c["sender_id"] != current_email:
-            other_emails.add(c["sender_id"])
-        if c["receiver_id"] != current_email:
-            other_emails.add(c["receiver_id"])
+    for conn in connections:
+        if conn["user1"] != current_email:
+            other_emails.add(conn["user1"])
+        if conn["user2"] != current_email:
+            other_emails.add(conn["user2"])
             
     if not other_emails:
         return []

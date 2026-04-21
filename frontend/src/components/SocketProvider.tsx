@@ -44,7 +44,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
 
             const socketInstance = io(`${protocol}://${host}`, {
                 path: "/ws/socket.io",
-                transports: ["websocket", "polling"],
+                transports: ["websocket"],
                 reconnection: true,
                 reconnectionAttempts: 5,
                 reconnectionDelay: 2000,
@@ -54,7 +54,11 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
                 setIsConnected(true);
                 console.log("[Socket] Connected to Real-time Engine");
                 if (user?.email) {
-                    socketInstance.emit("authenticate", { email: user.email });
+                    socketInstance.emit("authenticate", { 
+                        email: user.email,
+                        name: user.name || user.full_name || user.email.split('@')[0],
+                        role: user.role || 'member'
+                    });
                 }
             });
 
@@ -78,8 +82,20 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
                 window.dispatchEvent(new CustomEvent("WORK_REQUEST_CLAIMED", { detail: data }));
             });
 
+            // Heartbeat Interval to keep connection alive and update presence
+            const heartbeatInterval = setInterval(() => {
+                if (socketInstance.connected && user?.email) {
+                    socketInstance.emit("heartbeat", { email: user.email });
+                }
+            }, 30000); // 30 seconds
+
             socketRef.current = socketInstance;
             setSocket(socketInstance);
+            
+            return () => {
+                clearInterval(heartbeatInterval);
+                socketInstance.disconnect();
+            };
         }).catch((err) => {
             console.warn("[Socket] Failed to load socket.io-client:", err);
         });
